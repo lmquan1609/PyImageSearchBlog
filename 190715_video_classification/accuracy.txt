@@ -1,0 +1,9 @@
+                precision    recall  f1-score   support
+
+      football       0.84      0.97      0.90       196
+        tennis       0.92      0.88      0.90       179
+weight_lifting       0.97      0.81      0.89       143
+
+      accuracy                           0.90       518
+     macro avg       0.91      0.89      0.90       518
+  weighted avg       0.91      0.90      0.90       518

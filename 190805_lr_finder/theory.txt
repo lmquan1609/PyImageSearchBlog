@@ -1,0 +1,61 @@
+By decreasing lr over time, we can allow model to descend into lower areas of the loss landscape
+Practically, there are a few problems with a monotonically decreasing lr:
+- Model and optimizer are sensitive to initial choice in lr
+- Don't know what initial lr would be, so need to perform 10s to 100s of experiments just to find initial lr
+- No guarantee that our model will descend into areas of low loss when lowering lr
+Now instead of monotonically decreasing lr, we:
+- define lower and upper bound of lr
+- allow lr to oscillate back and forth between these bounds
+Firstly, lr is vert small (lower bound). Then, overtime, the lr continues to grow until the max lr (upper bound). This cyclical pattern continues throughout training
+Why monotonically decreasing lr does not work?
+- Network may be stuck in local minima
+- Model becomes very sensitive to initial lr
+So, Cyclical LR enables us to:
+- Have wide range of initial lr -> need far fewer lr tuning experiments
+- Break out the local minima
+Some parameters need to tune in Cyclical LR:
+- Batch size
+- Iteration (steps_per_epoch)
+- Cycle: number of iterations for lr to oscillate from lower to upper, and back to lower
+- Step size: number of iteration in half cycle (should be 4 or 8)
+2 policies in CLR: triangular and triangular2
+
+              precision    recall  f1-score   support
+
+    airplane       0.94      0.91      0.92      1000
+  automobile       0.93      0.97      0.95      1000
+        bird       0.91      0.90      0.90      1000
+         cat       0.88      0.83      0.85      1000
+        deer       0.92      0.91      0.92      1000
+         dog       0.91      0.87      0.89      1000
+        frog       0.88      0.97      0.93      1000
+       horse       0.94      0.94      0.94      1000
+        ship       0.95      0.94      0.95      1000
+       truck       0.92      0.95      0.93      1000
+
+    accuracy                           0.92     10000
+   macro avg       0.92      0.92      0.92     10000
+weighted avg       0.92      0.92      0.92     10000
+
+CLRs enable us to obtain higher accuracy with fewer experiments and limited hyperparameters tuning, but how de we know what are good choices for lr
+Set very small (1e-10) and very large (1e+1) lr bounds --> start training network --> Increase lr exponentially after every batch update --> Record loss and lr at the end of each batch --> Train for N epochs (usually 3 -5 epochs) --> Plot loss and lr --> Examine plot and identify optimal lr --> update lr --> train network on full set of data
+Step 1: Define an lower (very small 1e-10) and upper (very large 1e+1) bounds
+Step 2: start training network with lower bound. After each batch update, increase exponentially lr. Log the loss after each batch update as well
+Step 3: train continues and continue to increase until we hit our max lr value. Only take 1 - 5 epochs
+Step 4: After completing training, plot a smoothed loss over time, allow us to see when lr is both large enough for loss to decrease and too large where loss starts to increase
+              precision    recall  f1-score   support
+
+         top       0.89      0.86      0.87      1000
+     trouser       1.00      0.99      0.99      1000
+    pullover       0.91      0.89      0.90      1000
+       dress       0.96      0.85      0.90      1000
+        coat       0.92      0.91      0.91      1000
+      sandal       0.99      0.99      0.99      1000
+       shirt       0.73      0.86      0.79      1000
+     sneaker       0.97      0.97      0.97      1000
+         bag       0.99      0.99      0.99      1000
+  ankle boot       0.97      0.97      0.97      1000
+
+    accuracy                           0.93     10000
+   macro avg       0.93      0.93      0.93     10000
+weighted avg       0.93      0.93      0.93     10000
