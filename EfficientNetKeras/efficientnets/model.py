@@ -89,4 +89,18 @@ def MBConvBlock(input_filters, output_filters, kernel_size, strides, expand_rati
         x = layers.Conv2D(output_filters, (1, 1), strides=(1, 1), padding='same', use_bias=False, kernel_initializer=conv_initializer())(inputs)(x)
         x = layers.BatchNormalization(axis=chan_dim, momentum=batch_norm_momentum, epsilon=batch_norm_epsilon)(x)
 
+        if id_skip:
+            if all(s == 1 for s in strides) and (input_filters == output_filters):
+                # Only apply drop connect if skip presents
+                if drop_connect_rate:
+                    x = DropConnect(drop_connect_rate)(x)
+
+                x = layers.Add()([x, inputs])
+        
+        return x
+
+    return block
+
+def EfficientNet(input_shape, block_args: List[BlockArgs], width_coefficient: float, depth_coefficient: float, include_top=True, weights=None, input_tensor=None, pooling=None, classes=1000, drop_rate=0., drop_connect_rate=0., batch_norm_momentum=0.99, batch_norm_epsilon=1e-3, depth_divisor=8, min_depth=None, data_format=None, default_size=None, **kwargs):
+    
         
