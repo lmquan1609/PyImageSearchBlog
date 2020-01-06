@@ -2,6 +2,10 @@ import numpy as np
 import math
 from keras import backend as K
 from keras import layers
+from keras.models import Model
+from keras.utils import get_file, get_source_inputs
+from keras_applications.imagenet_utils import _obtain_input_shape
+from config import get_default_block_list
 import os
 
 def round_filters(filters, width_coefficient, depth_divisor, min_depth):
@@ -53,14 +57,14 @@ def SEBlock(input_filters, se_ratio, expand_ratio, data_format=None):
         x = layers.Conv2D(num_reduced_filters, (1, 1), 
                             strides=(1, 1),
                             padding='same', 
-                            kernel_initializer=conv_initializer())(x)
+                            kernel_initializer=ConvInitializer())(x)
         x = Swish()(x)
         # Excitation phase
         x = layers.Conv2D(filters, (1, 1), 
                         strides=(1, 1),
                         padding='same',
                         activation='sigmoid',
-                        kernel_initializer=conv_initializer())(x)
+                        kernel_initializer=ConvInitializer())(x)
         out = layers.Multiply([x, inputs]) # Another representation for Swish layer
         return out
     
@@ -91,7 +95,7 @@ def MBConvBlock(input_filters, output_filters,
             strides=(1, 1),
             padding='same',
             use_bias=False,
-            kernel_initializer=conv_initializer())(inputs)(x)
+            kernel_initializer=ConvInitializer())(inputs)(x)
             x = layers.BatchNormalization(axis=chan_dim,
                                     momentum=batch_norm_momentum,
                                     epsilon=batch_norm_epsilon)(x)
@@ -102,7 +106,7 @@ def MBConvBlock(input_filters, output_filters,
         x = layers.DepthwiseConv2D(kernel_size,
                                 strides=strides,
                                 padding='same',
-                                depthwise_initializer=conv_initializer(),
+                                depthwise_initializer=ConvInitializer(),
                                 use_bias=False)(x)
         x = layers.BatchNormalization(axis=chan_dim,
                                 momentum=batch_norm_momentum,
@@ -116,7 +120,7 @@ def MBConvBlock(input_filters, output_filters,
                         strides=(1, 1),
                         padding='same',
                         use_bias=False,
-                        kernel_initializer=conv_initializer())(inputs)(x)
+                        kernel_initializer=ConvInitializer())(inputs)(x)
         x = layers.BatchNormalization(axis=chan_dim,
                             momentum=batch_norm_momentum,
                             epsilon=batch_norm_epsilon)(x)
@@ -212,9 +216,16 @@ def EfficientNet(input_shape,
         block_args_list = get_default_block_list()
 
     # TODO: count # of strides to compute min size
+    stride_count = 1
+    for block_args in block_args_list:
+        if block_args.strides is not None and block_args.strides[0] > 1:
+            stride_count += 1
 
-    # TODO: Determine the proper input shape and default size
-    # input_shape = 
+    min_size = int(2 ** stride_count)
+    
+    # Determine proper input shape and default size
+    input_shape = _obtain_input_shape(input_shape, default_size, min_size,
+                                    data_format, include_top, weights=weights)
 
     # Stem part
     if input_tensor is None:
@@ -232,7 +243,7 @@ def EfficientNet(input_shape,
         (3, 3),
         strides=(2, 2),
         padding='same',
-        kernel_initializer=conv_initializer(),
+        kernel_initializer=ConvInitializer(),
         use_bias=False)(x)
     x = layers.BatchNormalization(axis=chan_dim,
                                 momentum=batch_norm_momentum,
@@ -277,3 +288,340 @@ def EfficientNet(input_shape,
                             block_args.identity_skip,
                             drop_connect_rate_per_block * block_idx,
                             batch_norm_epsilon, batch_norm_momentum, data_format)(x)
+
+    # Head part
+    x = layers.Conv2D(
+        round_filters(1280, width_coefficient, depth_divisor, min_depth),
+        (1, 1),
+        strides=(1, 1),
+        padding='same',
+        kernel_initializer=ConvInitializer(),
+        use_bias=False
+    )(x)
+    x = layers.BatchNormalization(axis=chan_dim,
+                            momentum=batch_norm_momentum,
+                            epsilon=batch_norm_epsilon)(x)
+    x = Swish()(x)
+
+    if include_top:
+        x = layers.GlobalAveragePooling2D(data_format=data_format)(x)
+        if drop_rate > 0:
+            x = layers.Dropout(drop_rate)(x)
+        x = layers.Dense(classes,
+                        activation='softmax'
+                        kernel_initializer=DenseInitializer())(x)
+    else:
+        if pooling == 'avg':
+            x = layers.GlobalAveragePooling2D()(x)
+        elif pooling == 'max':
+            x = layers.GlobalMaxPooling2D()(x)
+
+    outputs = x
+
+    # Ensure that the model takes into account any potential predecessors
+    if input_tensor is not None:
+        inputs = get_source_inputs(input_tensor)
+
+    model = Model(inputs, outputs)
+
+    # Load weights
+    if weights == 'imagenet':
+        if default_size == 224:
+            if include_top:
+                weights_path = get_file(
+                    'efficientnet-b0.h5',
+                    'https://github.com/titu1994/keras-efficientnets/releases/download/v0.1/efficientnet-b0.h5',
+                    cache_subdir='models'
+                )
+            else:
+                weights_path = get_file(
+                    'efficientnet-b0_notop.h5',
+                    'https://github.com/titu1994/keras-efficientnets/releases/download/v0.1/efficientnet-b0_notop.h5',
+                    cache_subdir='models'
+                )
+
+        elif default_size == 240:
+            if include_top:
+                weights_path = get_file(
+                    'efficientnet-b1.h5',
+                    'https://github.com/titu1994/keras-efficientnets/releases/download/v0.1/efficientnet-b1.h5',
+                    cache_subdir='models'
+                )
+            else:
+                weights_path = get_file(
+                    'efficientnet-b1_notop.h5',
+                    'https://github.com/titu1994/keras-efficientnets/releases/download/v0.1/efficientnet-b1_notop.h5',
+                    cache_subdir='models'
+                )
+
+        elif default_size == 260:
+            if include_top:
+                weights_path = get_file(
+                    'efficientnet-b2.h5',
+                    'https://github.com/titu1994/keras-efficientnets/releases/download/v0.1/efficientnet-b2.h5',
+                    cache_subdir='models'
+                )
+            else:
+                weights_path = get_file(
+                    'efficientnet-b2_notop.h5',
+                    'https://github.com/titu1994/keras-efficientnets/releases/download/v0.1/efficientnet-b2_notop.h5',
+                    cache_subdir='models'
+                )
+
+        elif default_size == 300:
+            if include_top:
+                weights_path = get_file(
+                    'efficientnet-b3.h5',
+                    'https://github.com/titu1994/keras-efficientnets/releases/download/v0.1/efficientnet-b3.h5',
+                    cache_subdir='models'
+                )
+            else:
+                weights_path = get_file(
+                    'efficientnet-b3_notop.h5',
+                    'https://github.com/titu1994/keras-efficientnets/releases/download/v0.1/efficientnet-b3_notop.h5',
+                    cache_subdir='models'
+                )
+
+        elif default_size == 380:
+            if include_top:
+                weights_path = get_file(
+                    'efficientnet-b4.h5',
+                    'https://github.com/titu1994/keras-efficientnets/releases/download/v0.1/efficientnet-b4.h5',
+                    cache_subdir='models'
+                )
+            else:
+                weights_path = get_file(
+                    'efficientnet-b4_notop.h5',
+                    'https://github.com/titu1994/keras-efficientnets/releases/download/v0.1/efficientnet-b4_notop.h5',
+                    cache_subdir='models'
+                )
+
+        elif default_size == 456:
+            if include_top:
+                weights_path = get_file(
+                    'efficientnet-b5.h5',
+                    'https://github.com/titu1994/keras-efficientnets/releases/download/v0.1/efficientnet-b5.h5',
+                    cache_subdir='models'
+                )
+            else:
+                weights_path = get_file(
+                    'efficientnet-b5_notop.h5',
+                    'https://github.com/titu1994/keras-efficientnets/releases/download/v0.1/efficientnet-b5_notop.h5',
+                    cache_subdir='models'
+                )
+        # TODO: Provide links for the last 2 EfficientNet
+        # elif default_size == 528:
+        #     if include_top:
+        #         weights_path = get_file(
+        #             'efficientnet-b6.h5',
+        #             'https://github.com/titu1994/keras-efficientnets/releases/download/v0.1/efficientnet-b6.h5',
+        #             cache_subdir='models'
+        #         )
+        #     else:
+        #         weights_path = get_file(
+        #             'efficientnet-b6_notop.h5',
+        #             'https://github.com/titu1994/keras-efficientnets/releases/download/v0.1/efficientnet-b6_notop.h5',
+        #             cache_subdir='models'
+        #         )
+
+        # elif default_size == 600:
+        #     if include_top:
+        #         weights_path = get_file(
+        #             'efficientnet-b7.h5',
+        #             'https://github.com/titu1994/keras-efficientnets/releases/download/v0.1/efficientnet-b7.h5',
+        #             cache_subdir='models'
+        #         )
+        #     else:
+        #         weights_path = get_file(
+        #             'efficientnet-b7_notop.h5',
+        #             'https://github.com/titu1994/keras-efficientnets/releases/download/v0.1/efficientnet-b7_notop.h5',
+        #             cache_subdir='models'
+        #         )
+    elif weights is not None:
+        model.load_weights(weights)
+    
+    return model
+
+def EfficientNetB0(input_shape=None,
+                    include_top=True,
+                    weights='imagenet',
+                    input_tensor=None,
+                    pooling=None,
+                    classes=1000,
+                    drop_rate=0.2,
+                    drop_connect_rate=0.,
+                    data_format=None):
+    return EfficientNet(input_shape,
+                        get_default_block_list(),
+                        width_coefficient=1.0,
+                        depth_coefficient=1.0,
+                        include_top=include_top,
+                        weights=weights,
+                        input_tensor=input_tensor,
+                        pooling=pooling,
+                        classes=classes,
+                        drop_rate=drop_rate,
+                        drop_connect_rate=drop_connect_rate,
+                        data_format=data_format,
+                        default_size=224)
+
+def EfficientNetB1(input_shape=None,
+                    include_top=True,
+                    weights='imagenet',
+                    input_tensor=None,
+                    pooling=None,
+                    classes=1000,
+                    drop_rate=0.2,
+                    drop_connect_rate=0.,
+                    data_format=None):
+    return EfficientNet(input_shape,
+                        get_default_block_list(),
+                        width_coefficient=1.0,
+                        depth_coefficient=1.1,
+                        include_top=include_top,
+                        weights=weights,
+                        input_tensor=input_tensor,
+                        pooling=pooling,
+                        classes=classes,
+                        drop_rate=drop_rate,
+                        drop_connect_rate=drop_connect_rate,
+                        data_format=data_format,
+                        default_size=240)
+
+def EfficientNetB2(input_shape=None,
+                    include_top=True,
+                    weights='imagenet',
+                    input_tensor=None,
+                    pooling=None,
+                    classes=1000,
+                    drop_rate=0.3,
+                    drop_connect_rate=0.,
+                    data_format=None):
+    return EfficientNet(input_shape,
+                        get_default_block_list(),
+                        width_coefficient=1.1,
+                        depth_coefficient=1.2,
+                        include_top=include_top,
+                        weights=weights,
+                        input_tensor=input_tensor,
+                        pooling=pooling,
+                        classes=classes,
+                        drop_rate=drop_rate,
+                        drop_connect_rate=drop_connect_rate,
+                        data_format=data_format,
+                        default_size=260)
+
+def EfficientNetB3(input_shape=None,
+                    include_top=True,
+                    weights='imagenet',
+                    input_tensor=None,
+                    pooling=None,
+                    classes=1000,
+                    drop_rate=0.3,
+                    drop_connect_rate=0.,
+                    data_format=None):
+    return EfficientNet(input_shape,
+                        get_default_block_list(),
+                        width_coefficient=1.2,
+                        depth_coefficient=1.4,
+                        include_top=include_top,
+                        weights=weights,
+                        input_tensor=input_tensor,
+                        pooling=pooling,
+                        classes=classes,
+                        drop_rate=drop_rate,
+                        drop_connect_rate=drop_connect_rate,
+                        data_format=data_format,
+                        default_size=300)
+
+def EfficientNetB4(input_shape=None,
+                    include_top=True,
+                    weights='imagenet',
+                    input_tensor=None,
+                    pooling=None,
+                    classes=1000,
+                    drop_rate=0.4,
+                    drop_connect_rate=0.,
+                    data_format=None):
+    return EfficientNet(input_shape,
+                        get_default_block_list(),
+                        width_coefficient=1.4,
+                        depth_coefficient=1.8,
+                        include_top=include_top,
+                        weights=weights,
+                        input_tensor=input_tensor,
+                        pooling=pooling,
+                        classes=classes,
+                        drop_rate=drop_rate,
+                        drop_connect_rate=drop_connect_rate,
+                        data_format=data_format,
+                        default_size=380)
+
+def EfficientNetB5(input_shape=None,
+                    include_top=True,
+                    weights='imagenet',
+                    input_tensor=None,
+                    pooling=None,
+                    classes=1000,
+                    drop_rate=0.4,
+                    drop_connect_rate=0.,
+                    data_format=None):
+    return EfficientNet(input_shape,
+                        get_default_block_list(),
+                        width_coefficient=1.6,
+                        depth_coefficient=2.2,
+                        include_top=include_top,
+                        weights=weights,
+                        input_tensor=input_tensor,
+                        pooling=pooling,
+                        classes=classes,
+                        drop_rate=drop_rate,
+                        drop_connect_rate=drop_connect_rate,
+                        data_format=data_format,
+                        default_size=456)
+
+def EfficientNetB6(input_shape=None,
+                    include_top=True,
+                    weights='imagenet',
+                    input_tensor=None,
+                    pooling=None,
+                    classes=1000,
+                    drop_rate=0.5,
+                    drop_connect_rate=0.,
+                    data_format=None):
+    return EfficientNet(input_shape,
+                        get_default_block_list(),
+                        width_coefficient=1.8,
+                        depth_coefficient=2.6,
+                        include_top=include_top,
+                        weights=weights,
+                        input_tensor=input_tensor,
+                        pooling=pooling,
+                        classes=classes,
+                        drop_rate=drop_rate,
+                        drop_connect_rate=drop_connect_rate,
+                        data_format=data_format,
+                        default_size=528)
+
+def EfficientNetB7(input_shape=None,
+                    include_top=True,
+                    weights='imagenet',
+                    input_tensor=None,
+                    pooling=None,
+                    classes=1000,
+                    drop_rate=0.5,
+                    drop_connect_rate=0.,
+                    data_format=None):
+    return EfficientNet(input_shape,
+                        get_default_block_list(),
+                        width_coefficient=2.0,
+                        depth_coefficient=3.1,
+                        include_top=include_top,
+                        weights=weights,
+                        input_tensor=input_tensor,
+                        pooling=pooling,
+                        classes=classes,
+                        drop_rate=drop_rate,
+                        drop_connect_rate=drop_connect_rate,
+                        data_format=data_format,
+                        default_size=600)

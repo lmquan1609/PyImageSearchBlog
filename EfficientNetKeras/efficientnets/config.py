@@ -18,7 +18,6 @@ class BlockArgs:
         self.expand_ratio = expand_ratio
         self.identity_skip = identity_skip
 
-    # !review after having implementation
     def decode_block_string(self, block_string):
         '''Get a block arguments through a string notation of arguments'''
         assert isinstance(block_string, str)
@@ -81,6 +80,10 @@ def get_default_block_list():
     DEFAULT_BLOCK_LIST = [
         BlockArgs(32, 16, kernel_size=3, strides=(1, 1), num_repeat=1, se_ratio=0.25, expand_ratio=1),
         BlockArgs(16, 24, kernel_size=3, strides=(2, 2), num_repeat=2, se_ratio=0.25, expand_ratio=6),
-        BlockArgs(24, 40, kernel_size=5, strides=(2, 2), num_repeat=2, se_ratio=0.25, expand_ratio=6)
+        BlockArgs(24, 40, kernel_size=5, strides=(2, 2), num_repeat=2, se_ratio=0.25, expand_ratio=6),
+        BlockArgs(40, 80, kernel_size=3, strides=(2, 2), num_repeat=3, se_ratio=0.25, expand_ratio=6),
+        BlockArgs(80, 112, kernel_size=5, strides=(1, 1), num_repeat=3, se_ratio=0.25, expand_ratio=6),
+        BlockArgs(112, 192, kernel_size=5, strides=(2, 2), num_repeat=4, se_ratio=0.25, expand_ratio=6),
+        BlockArgs(192, 320, kernel_size=3, strides=(1, 1), num_repeat=1, se_ratio=0.25, expand_ratio=6)
     ]
     return DEFAULT_BLOCK_LIST
