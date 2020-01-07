@@ -1,11 +1,13 @@
 import numpy as np
 import math
-from keras import backend as K
-from keras import layers
-from keras.models import Model
-from keras.utils import get_file, get_source_inputs
+from typing import List
+from tensorflow.keras import backend as K
+from tensorflow.keras import layers
+from tensorflow.keras.models import Model
+from tensorflow.keras.utils import get_file, get_source_inputs
 from keras_applications.imagenet_utils import _obtain_input_shape
-from config import get_default_block_list
+from .custom_objects import ConvInitializer, DenseInitializer, Swish, DropConnect
+from .config import BlockArgs, get_default_block_list
 import os
 
 def round_filters(filters, width_coefficient, depth_divisor, min_depth):
@@ -308,7 +310,7 @@ def EfficientNet(input_shape,
         if drop_rate > 0:
             x = layers.Dropout(drop_rate)(x)
         x = layers.Dense(classes,
-                        activation='softmax'
+                        activation='softmax',
                         kernel_initializer=DenseInitializer())(x)
     else:
         if pooling == 'avg':

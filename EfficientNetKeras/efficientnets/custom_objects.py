@@ -1,7 +1,7 @@
-import numpy as mp
+import numpy as np
 import tensorflow as tf
-from keras import backend as K
-from keras import initializers, layers
+from tensorflow.keras import backend as K
+from tensorflow.keras import initializers, layers
 from keras.utils.generic_utils import get_custom_objects
 
 class ConvInitializer(initializers.Initializer):
@@ -13,7 +13,7 @@ class ConvInitializer(initializers.Initializer):
 
         kernel_height, kernel_width, _, output_filters = shape
         fan_out = int(kernel_height * kernel_width * output_filters)
-        return K.random_normal(shape
+        return K.random_normal(shape,
                             mean=0.0,
                             stddev=np.sqrt(2.0/fan_out),
                             dtype=dtype)
