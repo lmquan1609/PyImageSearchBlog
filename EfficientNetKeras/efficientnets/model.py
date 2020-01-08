@@ -6,8 +6,12 @@ from tensorflow.keras import layers
 from tensorflow.keras.models import Model
 from tensorflow.keras.utils import get_file, get_source_inputs
 from keras_applications.imagenet_utils import _obtain_input_shape
-from .custom_objects import ConvInitializer, DenseInitializer, Swish, DropConnect
-from .config import BlockArgs, get_default_block_list
+# For build pip, running out of range of this folder
+# from .custom_objects import ConvInitializer, DenseInitializer, Swish, DropConnect
+# from .config import BlockArgs, get_default_block_list
+# For not build pip, running this file
+from custom_objects import ConvInitializer, DenseInitializer, Swish, DropConnect
+from config import BlockArgs, get_default_block_list
 import os
 
 def round_filters(filters, width_coefficient, depth_divisor, min_depth):
@@ -67,7 +71,7 @@ def SEBlock(input_filters, se_ratio, expand_ratio, data_format=None):
                         padding='same',
                         activation='sigmoid',
                         kernel_initializer=ConvInitializer())(x)
-        out = layers.Multiply([x, inputs]) # Another representation for Swish layer
+        out = layers.Multiply()([x, inputs]) # Another representation for Swish layer
         return out
     
     return block
@@ -94,10 +98,10 @@ def MBConvBlock(input_filters, output_filters,
     def block(inputs):
         if expand_ratio != 1:
             x = layers.Conv2D(filters, (1, 1),
-            strides=(1, 1),
-            padding='same',
-            use_bias=False,
-            kernel_initializer=ConvInitializer())(inputs)(x)
+                            strides=(1, 1),
+                            padding='same',
+                            use_bias=False,
+                            kernel_initializer=ConvInitializer())(inputs)
             x = layers.BatchNormalization(axis=chan_dim,
                                     momentum=batch_norm_momentum,
                                     epsilon=batch_norm_epsilon)(x)
@@ -122,7 +126,7 @@ def MBConvBlock(input_filters, output_filters,
                         strides=(1, 1),
                         padding='same',
                         use_bias=False,
-                        kernel_initializer=ConvInitializer())(inputs)(x)
+                        kernel_initializer=ConvInitializer())(x)
         x = layers.BatchNormalization(axis=chan_dim,
                             momentum=batch_norm_momentum,
                             epsilon=batch_norm_epsilon)(x)
@@ -627,3 +631,7 @@ def EfficientNetB7(input_shape=None,
                         drop_connect_rate=drop_connect_rate,
                         data_format=data_format,
                         default_size=600)
+
+if __name__ == '__main__':
+    model = EfficientNetB0(include_top=True)
+    model.summary()

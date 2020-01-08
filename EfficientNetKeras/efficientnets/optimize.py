@@ -3,7 +3,7 @@ from scipy.optimize import minimize
 from sklearn.model_selection import ParameterGrid
 
 def get_compound_coeff_func(phi=1.0, max_cost=2.0):
-    def compund_coeff(x):
+    def compound_coeff(x):
         alpha = x[0]
         beta = x[1]
         gamma = x[2]
@@ -17,7 +17,7 @@ def get_compound_coeff_func(phi=1.0, max_cost=2.0):
         cost = depth * (width ** 2) * (resolution ** 2)
         return (cost - max_cost) ** 2
 
-    return compund_coeff
+    return compound_coeff
 
 def optimize_coefficients(num_coeff=3, cost_func=None, phi=1.0, max_cost=2.0,
                         search_per_coeff=4, save_coeff=True, tol=None):
@@ -46,7 +46,7 @@ def optimize_coefficients(num_coeff=3, cost_func=None, phi=1.0, max_cost=2.0,
     """
     phi = float(phi)
     max_cost = float(max_cost)
-    search_per_coeff = float(search_per_coeff)
+    search_per_coeff = int(search_per_coeff)
 
     if cost_func is None:
         cost_func = get_compound_coeff_func(phi=phi, max_cost=max_cost)
@@ -63,7 +63,7 @@ def optimize_coefficients(num_coeff=3, cost_func=None, phi=1.0, max_cost=2.0,
 
     grid = {i: np.linspace(1.0, max_cost, num=search_per_coeff)
             for i in range(num_coeff)}
-    param_grid  = ParameterGrid(grid)
+    param_grid = ParameterGrid(grid)
     for idx, param in enumerate(param_grid):
         # Create a vector for the cost function and minimize using SLSQP
         x0 = np.array([param[i] for i in range(num_coeff)])
@@ -79,3 +79,10 @@ def optimize_coefficients(num_coeff=3, cost_func=None, phi=1.0, max_cost=2.0,
     if save_coeff:
         np.save('param_coeff.npy', param_set)
     return param_set
+
+if __name__ == '__main__':
+    cost_func = get_compound_coeff_func(phi=1.0, max_cost=2.0)
+    results = optimize_coefficients(cost_func=cost_func, phi=1.0, max_cost=2.0, search_per_coeff=10)
+    print("Num unique configs = ", len(results))
+    for i in range(10):  # print just the first 10 results out of 1000 results
+        print(i + 1, results[i], "Cost :", cost_func(results[i]))
