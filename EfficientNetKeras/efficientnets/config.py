@@ -43,7 +43,7 @@ class BlockArgs:
 
         return self
 
-    def encode_block_string(self, block):
+    def encode_block_string(self):
         '''
         Encode a block to a string
         Encoding schema: "rX_kX_sXX_eX_iX_oX{_se0.XX}{_noskip}"
@@ -54,18 +54,18 @@ class BlockArgs:
         ```
         '''
         args = [
-            f'r{block.num_repeat}',
-            f'k{block.kernel_size}',
-            f's{block.strides[0], block.strides[1]}',
-            f'e{block.expand_ratio}',
-            f'i{block.input_filters}',
-            f'o{block.output_filters}'
+            f'r{self.num_repeat}',
+            f'k{self.kernel_size}',
+            f's{self.strides[0]}{self.strides[1]}',
+            f'e{self.expand_ratio}',
+            f'i{self.input_filters}',
+            f'o{self.output_filters}'
         ]
 
-        if block.se_ratio > 0 and block.se_ratio <= 1:
-            args.append(f'se{block.se_ratio}')
+        if self.se_ratio > 0 and self.se_ratio <= 1:
+            args.append(f'se{self.se_ratio}')
 
-        if not block.identity_skip:
+        if not self.identity_skip:
             args.append('noskip')
 
         return '_'.join(args)

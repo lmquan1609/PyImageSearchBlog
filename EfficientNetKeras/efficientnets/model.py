@@ -20,7 +20,7 @@ def round_filters(filters, width_coefficient, depth_divisor, min_depth):
     divisor = int(depth_divisor)
     
     if not multiplier:
-        return filter
+        return filters
 
     filters *= multiplier
     min_depth = min_depth or divisor
