@@ -1,6 +1,17 @@
 import torch
 from torch import nn
 import torch.nn.functional as F
+from utils import (
+    get_same_padding_conv2d,
+    Swish,
+    MemoryEfficientSwish,
+    round_filters,
+    round_repeats,
+    drop_connect,
+    efficientnet_params,
+    load_pretrained_weights,
+    get_model_params
+)
 
 class MBConvBlock(nn.Module):
     """
@@ -13,7 +24,7 @@ class MBConvBlock(nn.Module):
         super().__init__()
         self._block_args = block_args
         self._batch_norm_momentum = 1 - global_params.batch_norm_momentum
-        self._batch_norm_epsilon = 1 - global_params.batch_norm_epsilon
+        self._batch_norm_epsilon = global_params.batch_norm_epsilon
         self.has_se = (self._block_args.se_ratio is not None) \
                     and (0 < self._block_args.se_ratio <= 1)
         self.id_skip = block_args.id_skip # skip connection and drop connect
@@ -34,7 +45,7 @@ class MBConvBlock(nn.Module):
         stride = self._block_args.stride
         self._depthwise_conv = Conv2d(output_filters, output_filters, kernel_size,
                                     stride=stride,
-                                    groups=1,
+                                    groups=output_filters,
                                     bias=False)
         self._bn1 = nn.BatchNorm2d(output_filters,
                                     eps=self._batch_norm_epsilon,
@@ -75,7 +86,7 @@ class MBConvBlock(nn.Module):
         input_filters, output_filters = self._block_args.input_filters, self._block_args.output_filters
         if self.id_skip and self._block_args.stride == 1 and input_filters == output_filters:
             if drop_connect_rate:
-                x = drop_connect(x, p=drop_connect_rate, training=self.training)
+                x = drop_connect(x, drop_connect_rate, self.training)
             
             x = x + inputs
         
@@ -94,26 +105,26 @@ class EfficientNet(nn.Module):
         global_params: namedtuple, A set of GlobalParams shared between blocks
     """
 
-    def __init__(self, block_args=None, global_params=None):
+    def __init__(self, blocks_args=None, global_params=None):
         super().__init__()
-        assert isinstance(block_args, list), 'block_args should be a list'
-        assert len(block_args) > 0, 'length of block_args must be greater than 0'
+        assert isinstance(blocks_args, list), 'block_args should be a list'
+        assert len(blocks_args) > 0, 'length of block_args must be greater than 0'
         self._global_params = global_params
-        self._block_args = block_args
+        self._blocks_args = blocks_args
 
         # Get static or dynamic convolution depending on image size
         Conv2d = get_same_padding_conv2d(image_size=global_params.image_size)
 
         # Batch norm parameters
         batch_norm_momentum = 1 - self._global_params.batch_norm_momentum
-        batch_norm_epsilon = self._block_args.batch_norm_epsilon
+        batch_norm_epsilon = self._global_params.batch_norm_epsilon
 
         # Stem
         in_channels = 3 # RGB
         out_channels = round_filters(32, self._global_params)
         self._conv_stem = Conv2d(in_channels, out_channels, 3, stride=2, bias=False)
         # !: self._conv_stem = Conv2d(in_channels, out_channels, 3, stride=2, padding=1, bias=False)
-        self.bn0 = nn.BatchNorm2d(out_channels,
+        self._bn0 = nn.BatchNorm2d(out_channels,
                                 eps=batch_norm_epsilon,
                                 momentum=batch_norm_momentum)
 
@@ -124,7 +135,7 @@ class EfficientNet(nn.Module):
             block_args = block_args._replace(
                 input_filters=round_filters(block_args.input_filters, self._global_params),
                 output_filters=round_filters(block_args.output_filters, self._global_params),
-                num_repeat=round_repeat(block_args.num_repeat, self._global_params)
+                num_repeat=round_repeats(block_args.num_repeat, self._global_params)
             )
 
             # The first block needs to take care of stride and filter size increase
@@ -142,8 +153,8 @@ class EfficientNet(nn.Module):
         out_channels = round_filters(1280, self._global_params)
         self._conv_head = Conv2d(in_channels, out_channels, 1, bias=False)
         self._bn1 = nn.BatchNorm2d(out_channels,
-                                eps=self._batch_norm_epsilon,
-                                momentum=self._batch_norm_momentum)
+                                eps=batch_norm_epsilon,
+                                momentum=batch_norm_momentum)
         
         # Final linear layer
         self._avg_pooling = nn.AdaptiveAvgPool2d(1)
@@ -176,7 +187,6 @@ class EfficientNet(nn.Module):
 
     def forward(self, inputs):
         """Calls extract_features to extract features, applies final linear layer and return logits"""
-        batch_size = inputs.shape[0]
         # Convolutional layers
         x = self.extract_features(inputs)
 
@@ -190,13 +200,13 @@ class EfficientNet(nn.Module):
     @classmethod
     def from_name(cls, model_name, override_params=None):
         cls._check_model_name_is_valid(model_name)
-        block_args, global_params = get_model_params(model_name, override_params)
-        return cls(block_args, global_params)
+        blocks_args, global_params = get_model_params(model_name, override_params)
+        return cls(blocks_args=blocks_args, global_params=global_params)
     
     @classmethod
     def from_pretrained(cls, model_name, num_classes=1000, in_channels=3):
         model = cls.from_name(model_name, override_params={'num_classes': num_classes})
-        load_pretrained_weights(model, model_name, load_fc=(num_classes == 1000))
+        load_pretrained_weights(model, model_name, not_load=False, load_fc=(num_classes == 1000))
         if in_channels != 3:
             Conv2d = get_same_padding_conv2d(image_size=model._global_params.image_size)
             out_channels = round_filters(32, model._global_params)
@@ -210,3 +220,6 @@ class EfficientNet(nn.Module):
         valid_models = [f'efficientnet-b{i}' for i in range(num_models)]
         if model_name not in valid_models:
             raise ValueError(f"Model_name should be one of: {', '.join(valid_models)}")
+
+if __name__ == '__main__':
+    model = EfficientNet.from_pretrained('efficientnet-b0')

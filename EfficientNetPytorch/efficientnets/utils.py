@@ -1,6 +1,7 @@
 from collections import namedtuple
 import math
 from functools import partial
+import re
 import torch
 from torch import nn
 import torch.nn.functional as F
@@ -15,7 +16,7 @@ GlobalParams = namedtuple('GlobalParams', [
 
 # Parameters for an individual model block
 BlockArgs = namedtuple('BlockArgs', [
-    'kernel_size', 'num_repeat', 'input_filters, output_filters',
+    'kernel_size', 'num_repeat', 'input_filters', 'output_filters',
     'expand_ratio', 'id_skip', 'stride', 'se_ratio'
 ])
 
@@ -95,7 +96,7 @@ class Conv2dStaticSamePadding(nn.Conv2d):
 
         # Calculate padding based on image size and save it
         assert image_size is not None
-        ih, iw = image_size if isinstance(tmp, list) else (image_size, image_size)
+        ih, iw = image_size if isinstance(image_size, list) else (image_size, image_size)
         kh, kw = self.weight.shape[-2:]
         sh, sw = self.stride
         oh, ow = math.ceil(ih / sh), math.ceil(iw / sw)
@@ -122,13 +123,14 @@ def efficientnet_params(model_name):
     """Map EfficientNet model name to parameter coefficients"""
     params_dict = {
         # Coefficients: Width, Depth, Res, Dropout
-        'efficientnet-b0': (1.0, 1.1, 224, 0.2),
+        'efficientnet-b0': (1.0, 1.0, 224, 0.2),
         'efficientnet-b1': (1.0, 1.1, 240, 0.2),
         'efficientnet-b2': (1.1, 1.2, 260, 0.3),
         'efficientnet-b3': (1.2, 1.4, 300, 0.3),
-        'efficientnet-b4': (1.6, 2.2, 456, 0.4),
-        'efficientnet-b5': (1.8, 2.6, 528, 0.5),
-        'efficientnet-b6': (2.0, 3.1, 600, 0.5)
+        'efficientnet-b4': (1.4, 1.8, 380, 0.4),
+        'efficientnet-b5': (1.6, 2.2, 456, 0.4),
+        'efficientnet-b6': (1.8, 2.6, 528, 0.5),
+        'efficientnet-b7': (2.0, 3.1, 600, 0.5)
     }
     return params_dict[model_name]
 
@@ -162,7 +164,7 @@ def get_model_params(model_name, override_params):
     if model_name.startswith('efficientnet'):
         w, d, s, p = efficientnet_params(model_name)
         # note: all models have drop connect rate = 0.2
-        block_args, global_prams = efficientnet(width_coefficient=w,
+        blocks_args, global_params = efficientnet(width_coefficient=w,
                                                 depth_coefficient=d,
                                                 dropout_rate=p,
                                                 image_size=s)
@@ -172,7 +174,7 @@ def get_model_params(model_name, override_params):
     if override_params:
         global_params = global_params._replace(**override_params)
     
-    return block_args, global_params
+    return blocks_args, global_params
 
 url_map = {
     'efficientnet-b0': 'http://storage.googleapis.com/public-models/efficientnet/efficientnet-b0-355c32eb.pth',
@@ -185,16 +187,20 @@ url_map = {
     'efficientnet-b7': 'http://storage.googleapis.com/public-models/efficientnet/efficientnet-b7-dcc49843.pth',
 }
 
-def load_pretrained_weights(model, model_name, load_fc=True):
+def load_pretrained_weights(model, model_name, not_load=True, load_fc=True):
     """Loads pretrained weights, and downloads if loading for the first time"""
-    state_dict = model_zoo.load_url(url_map[model_name])
-    if load_fc:
-        model.load_state_dict(state_dict)
+    if not_load:
+        print(model)
     else:
-        state_dict.pop('_fc_weight')
-        state_dict.pop('_fc_bias')
-        model.load_state_dict(state_dict, strict=False)
-    print(f'Loaded pretrained weights for {model_name}')
+        state_dict = model_zoo.load_url(url_map[model_name])
+        
+        if load_fc:
+            model.load_state_dict(state_dict)
+        else:
+            state_dict.pop('_fc_weight')
+            state_dict.pop('_fc_bias')
+            model.load_state_dict(state_dict, strict=False)
+        print(f'Loaded pretrained weights for {model_name}')
 
 class BlockDecoder(object):
     """ Block Decoder for readability, straight from the official TensorFlow repository """
